@@ -16,8 +16,13 @@ class Infrastructure(object):
         self.models_path = self.create_folder_or_pass('models')
         self.datasets_path = self.create_folder_or_pass('datasets')
         self.scripts_path = self.create_folder_or_pass('scripts')
+        self.transforms_path = self.create_folder_or_pass('transforms')
+        self.metrics_path = self.create_folder_or_pass('metrics')
         self.create_file_or_pass(os.path.join(self.models_path, '__init__.py'))
         self.create_file_or_pass(os.path.join(self.scripts_path, '__init__.py'))
+        self.create_file_or_pass(os.path.join(self.metrics_path, '__init__.py'))
+        self.create_file_or_pass(os.path.join(self.transforms_path, '__init__.py'))
+        self.create_file_or_pass(os.path.join(self.datasets_path, '__init__.py'))
         self.create_db_or_pass('db.sqlite3')
 
     def create_folder_or_pass(self, which):
