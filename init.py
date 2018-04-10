@@ -1,6 +1,9 @@
 # coding: utf-8
+import json
 import os
+import hashlib
 import sqlite3
+import subprocess
 
 
 class Infrastructure(object):
@@ -10,7 +13,8 @@ class Infrastructure(object):
     """
     GLOBAL_PATH = os.path.dirname(os.path.abspath(__file__))
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, dbname='db.sqlite3', *args, **kwargs):
+        self.conn = sqlite3.connect(os.path.join(self.GLOBAL_PATH, dbname))
         self.snapshots_path = self.create_folder_or_pass('snapshots')
         self.logs_path = self.create_folder_or_pass('logs')
         self.models_path = self.create_folder_or_pass('models')
@@ -18,12 +22,23 @@ class Infrastructure(object):
         self.scripts_path = self.create_folder_or_pass('scripts')
         self.transforms_path = self.create_folder_or_pass('transforms')
         self.metrics_path = self.create_folder_or_pass('metrics')
+        self.visualizers_path = self.create_folder_or_pass('visualizers')
+        self.utils_path = self.create_folder_or_pass('utils')
+        self.compress_folders = ['logs', 'snapshots', 'datasets']
+
+    def init_structure(self):
         self.create_file_or_pass(os.path.join(self.models_path, '__init__.py'))
         self.create_file_or_pass(os.path.join(self.scripts_path, '__init__.py'))
         self.create_file_or_pass(os.path.join(self.metrics_path, '__init__.py'))
         self.create_file_or_pass(os.path.join(self.transforms_path, '__init__.py'))
         self.create_file_or_pass(os.path.join(self.datasets_path, '__init__.py'))
-        self.create_db_or_pass('db.sqlite3')
+        self.create_file_or_pass(os.path.join(self.visualizers_path, '__init__.py'))
+        self.create_file_or_pass(os.path.join(self.utils_path, '__init__.py'))
+        self.create_db_or_pass()
+        self.decompress()
+
+    def __del__(self):
+        self.conn.close()
 
     def create_folder_or_pass(self, which):
         path = os.path.join(self.GLOBAL_PATH, which)
@@ -48,37 +63,34 @@ class Infrastructure(object):
                 pass
             return path
 
-    def create_db_or_pass(self, dbname):
-        path = os.path.join(self.GLOBAL_PATH, dbname)
-        if os.path.exists(path):
-            return path
-        else:
-            conn = sqlite3.connect(path)
-            c = conn.cursor()
+    def create_db_or_pass(self):
+        try:
+            c = self.conn.cursor()
 
             c.execute('''
-                          CREATE TABLE 
+                          CREATE TABLE IF NOT EXISTS
                             datasets
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           name TEXT UNIQUE, 
                           path TEXT, 
                           description TEXT, 
-                          train_size INTEGER, 
-                          test_size INTEGER)
+                          additional TEXT,
+                          classname TEXT,
+                          train_count_files INTEGER, 
+                          test_count_files INTEGER)
                       ''')
 
             c.execute('''
-                          CREATE TABLE 
+                          CREATE TABLE IF NOT EXISTS
                             models
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           name TEXT UNIQUE, 
                           path TEXT, 
-                          description TEXT, 
-                          params TEXT)
+                          description TEXT)
                       ''')
 
             c.execute('''
-                          CREATE TABLE 
+                          CREATE TABLE IF NOT EXISTS
                             metrics
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
                           name TEXT UNIQUE, 
@@ -86,18 +98,21 @@ class Infrastructure(object):
                       ''')
 
             c.execute('''
-                          CREATE TABLE 
+                          CREATE TABLE IF NOT EXISTS
                             experiments
                          (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                          idmd5 TEXT,
                           model_id INTEGER,
                           dataset_id INTEGER,
                           train_params TEXT, 
                           description TEXT,
-                          dt DATETIME)
+                          dt DATETIME,
+                          FOREIGN KEY (model_id) REFERENCES models(id),
+                          FOREIGN KEY (dataset_id) REFERENCES datasets(id))
                       ''')
 
             c.execute('''
-                          CREATE TABLE 
+                          CREATE TABLE IF NOT EXISTS
                             metric_values
                          (experiment_id INTEGER,
                           metric_id INTEGER,
@@ -108,13 +123,105 @@ class Infrastructure(object):
                       ''')
 
             # Save (commit) the changes
-            conn.commit()
+            self.conn.commit()
+            return 1
+        except sqlite3.Error as e:
+            print("Database initialization failed")
+            raise e
 
-            # We can also close the connection if we are done with it.
-            # Just be sure any changes have been committed or they will be lost.
-            conn.close()
-            return path
+    def compress_for_git(self):
+        def compressor(path):
+            to_compress = []
+            for elem in os.listdir(path):
+                p = os.path.join(path, elem)
+                if os.path.isdir(p) and ('__pycache__' not in p) and (elem != '.') and (elem != '..'):
+                    to_compress.append(p)
+            return to_compress
+
+        for folder in self.compress_folders:
+            print("Searching for {} to compress".format(folder))
+            will_compress = compressor(folder)
+            if will_compress:
+                print("compressing {}".format(will_compress))
+                subprocess.call('tar -czf {}.tar.gz {}'.format(folder, ' '.join(will_compress)), shell=True)
+
+    def decompress(self):
+        # TODO: add consistency check
+        for folder in self.compress_folders:
+            print("Decompressing {}".format(folder))
+            if os.path.exists('{}.tar.gz'.format(folder)):
+                subprocess.call(['tar -xzf {}.tar.gz -C {}/'.format(folder, folder)])
+
+    def init_experiment(self, options):
+        """
+        Returns unique experiment id, based on experiment arguments.
+        :param options: experiment's boot parameters argparse obj
+        :return:
+        """
+        opt_array = []
+        for arg in vars(options):
+            opt_array.append(arg)
+
+        opt_array = sorted(opt_array)
+
+        str_to_hash = ""
+
+        for arg in opt_array:
+            str_to_hash += getattr(options, arg)
+
+        experiment_id = hashlib.md5(str_to_hash).hexdigest()
+        c = self.conn.cursor()
+        c.execute('''
+                     SELECT 
+                            *
+                     FROM
+                          experiments
+                     WHERE
+                          idmd5 = ?
+                  ''', experiment_id)
+
+        if c.fetchone():
+            text = ''
+            while (text != 'y') or (text != 'n'):
+                text = str(
+                    input("It seems like you've already launched such experiment. Do you want to continue?[y/n]:"))
+            if text.lower() == 'y':
+                print("Ok will start this experiment...")
+            else:
+                print("Then change some start parameters and restart")
+                exit(0)
+        else:
+            try:
+                c.execute('''
+                             INSERT INTO experiments (idmd5, model_id, dataset_id, train_params, description, dt) 
+                             SELECT 
+                              ?, t1.id, t2.id, ?, ?, ?
+                             FROM
+                                 (SELECT 
+                                   id 
+                                 FROM
+                                   models
+                                 WHERE name=?) AS t1,
+                                 (SELECT 
+                                   id 
+                                 FROM
+                                   datasets
+                                 WHERE name=?) AS t2
+                        
+                          ''',
+                          (experiment_id,
+                           json.dumps(vars(options)),
+                           options.description,
+                           sqlite3.datetime.datetime.now(),
+                           options.model,
+                           options.dataset))
+            except sqlite3.Error as e:
+                print("Experiment registration failed")
+                raise e
+
+            return experiment_id
 
 
 if __name__ == '__main__':
     infra = Infrastructure()
+    infra.init_structure()

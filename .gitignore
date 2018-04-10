@@ -182,5 +182,6 @@ $RECYCLE.BIN/
 pyvenv.cfg
 pip-selfcheck.json
 .idea/
-datasets/test/
-datasets/train/
+datasets/*/
+logs/*/
+snapshots/*/
