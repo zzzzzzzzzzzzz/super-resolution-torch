@@ -4,8 +4,10 @@ import argparse
 
 import os
 import sqlite3
-
+import time
 import sys
+
+import numpy as np
 import torch
 import torchvision
 import torch.nn as nn
@@ -15,12 +17,14 @@ from torchvision import transforms
 from tensorboard_logger import configure, log_value
 
 from init import Infrastructure
+from metrics.psnr import psnr
+from metrics.ssim import ssim
 from models.srgan import Generator, Discriminator, FeatureExtractor
 from transforms.myrandomsample import MyRandomSample
 from transforms.myresize import MyResize
 from transforms.totensor import MyToTensor
 from transforms.toycbcr import ToYCbCr
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
 from utils.find_klass_in_folder import find_klass
 from visualizers.srgan_vis import Visualizer
@@ -51,6 +55,7 @@ parser.add_argument('--generatorAdversarialLossWeight', type=float, default=1e-3
 opt = parser.parse_args()
 print(opt)
 experiment_id = infra.init_experiment(opt)
+start = time.time()
 print("Searching for dataset...")
 dataset_klass = None
 dataset_root = None
@@ -61,6 +66,7 @@ try:
               ''', opt.dataset)
     classname, dataset_root = c.fetchone()
     dataset_klass = find_klass(infra.datasets_path, classname)
+    infra.conn.commit()
 except sqlite3.Error:
     print("Error in fetching classname from db, exiting...")
     exit(-1)
@@ -76,8 +82,8 @@ if torch.cuda.is_available() and not opt.cuda:
     print("WARNING: You have a CUDA device, so you should probably run with --cuda")
 
 transform = transforms.Compose([ToYCbCr(),
-                                MyRandomSample(),
-                                MyResize(),
+                                MyRandomSample(opt.imageSize*opt.upSampling),
+                                MyResize(opt.imageSize),
                                 MyToTensor()])
 
 dataloader = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform),
@@ -156,7 +162,7 @@ else:
     sys.stdout.write("Skipping generator pretrain phase")
 
 # Do checkpointing
-torch.save(generator.state_dict(), '{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id))  # TODO: изменить пути сохранения
+torch.save(generator.state_dict(), '{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id))
 
 
 # SRGAN training
@@ -241,6 +247,102 @@ for epoch in range(opt.nEpochs):
     torch.save(generator.state_dict(), '{}/{}/generator_final.pth'.format(infra.snapshots_path, experiment_id))
     torch.save(discriminator.state_dict(), '{}/{}/discriminator_final.pth'.format(infra.snapshots_path, experiment_id))
 
+end = time.time()
+
+dataloader_test = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
+                        batch_size=1, num_workers=1)
+
+psnrs = []
+for i, data in enumerate(dataloader_test):
+    lr, hr = data
+
+    if opt.cuda:
+        high_res_real = Variable(hr.cuda())
+        high_res_fake = generator(Variable(lr).cuda())
+    else:
+        high_res_real = Variable(hr)
+        high_res_fake = generator(Variable(lr))
+
+    psnrs.append(psnr(high_res_real.data.numpy(), high_res_fake.data.numpy()))
+
+mean_psnr = np.mean(psnrs)
+ssims = []
+for i, data in enumerate(dataloader_test):
+    lr, hr = data
+
+    if opt.cuda:
+        high_res_real = Variable(hr.cuda())
+        high_res_fake = generator(Variable(lr).cuda())
+    else:
+        high_res_real = Variable(hr)
+        high_res_fake = generator(Variable(lr))
+
+    ssims.append(ssim(high_res_real.data.numpy(), high_res_fake.data.numpy()))
+
+mean_ssim = np.mean(ssims)
+
+try:
+    c = infra.conn.cursor()
+    c.execute('''
+                 INSERT INTO metric_values (experiment_id, metric_id, value) 
+                 SELECT
+                  t1.id as experiment_id,
+                  t2.id as metric_id,
+                  ?
+                 FROM
+                  (SELECT 
+                       id 
+                   FROM
+                       experiments
+                   WHERE idmd5=?) AS t1,
+                  (SELECT 
+                       id 
+                   FROM
+                       metrics
+                   WHERE name=?) AS t2
+              ''', (mean_psnr, experiment_id, 'psnr'))
+    c.execute('''
+                 INSERT INTO metric_values (experiment_id, metric_id, value) 
+                 SELECT
+                  t1.id as experiment_id,
+                  t2.id as metric_id,
+                  ?
+                 FROM
+                  (SELECT 
+                       id 
+                   FROM
+                       experiments
+                   WHERE idmd5=?) AS t1,
+                  (SELECT 
+                       id 
+                   FROM
+                       metrics
+                   WHERE name=?) AS t2
+              ''', (mean_ssim, experiment_id, 'ssim'))
+    c.execute('''
+                 INSERT INTO metric_values (experiment_id, metric_id, value) 
+                 SELECT
+                  t1.id as experiment_id,
+                  t2.id as metric_id,
+                  ?
+                 FROM
+                  (SELECT 
+                       id 
+                   FROM
+                       experiments
+                   WHERE idmd5=?) AS t1,
+                  (SELECT 
+                       id 
+                   FROM
+                       metrics
+                   WHERE name=?) AS t2
+              ''', (end-start, experiment_id, 'time'))
+    infra.conn.commit()
+except sqlite3.Error:
+    print("Error in writing metrics to db, exiting...")
+    exit(-1)
+
+
 # Avoid closing
-while True: # O_o
+while True:
     pass

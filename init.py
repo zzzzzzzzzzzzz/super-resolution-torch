@@ -4,6 +4,7 @@ import os
 import hashlib
 import sqlite3
 import subprocess
+import datetime
 
 
 class Infrastructure(object):
@@ -195,7 +196,7 @@ class Infrastructure(object):
                 c.execute('''
                              INSERT INTO experiments (idmd5, model_id, dataset_id, train_params, description, dt) 
                              SELECT 
-                              ?, t1.id, t2.id, ?, ?, ?
+                              ?, t1.id as model_id, t2.id as dataset_id, ?, ?, ?
                              FROM
                                  (SELECT 
                                    id 
@@ -212,9 +213,10 @@ class Infrastructure(object):
                           (experiment_id,
                            json.dumps(vars(options)),
                            options.description,
-                           sqlite3.datetime.datetime.now(),
+                           datetime.datetime.now(),
                            options.model,
                            options.dataset))
+                self.conn.commit()
             except sqlite3.Error as e:
                 print("Experiment registration failed")
                 raise e
