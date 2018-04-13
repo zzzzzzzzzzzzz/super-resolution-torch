@@ -43,8 +43,8 @@ def ret_mean(func):
 
 
 def ssim(image_original: np.ndarray, image_restored: np.ndarray, dynamic_range=255):
-    check_shape_len = lambda img: len(img.shpae) == 3
-    check_shape_order = lambda img: (img.shape[0] < img.shape[1]) and (img.shape[0] < img[2])
+    check_shape_len = lambda img: len(img.shape) == 3
+    check_shape_order = lambda img: (img.shape[0] < img.shape[1]) and (img.shape[0] < img.shape[2])
 
     assert check_shape_len(image_original), "Original image must be in (C,H,W) format"
     assert check_shape_order(image_original), "Original image must be in (C,H,W) format"

@@ -17,9 +17,9 @@ class MixedFlowersBerkley(Dataset):
                 on a sample.
         """
         if train:
-            self.root_dir, self.dirs, self.files = os.walk(os.path.join(self.root_dir, 'train/')).__next__()
+            self.root_dir, self.dirs, self.files = os.walk(os.path.join(root_dir, 'train/')).__next__()
         else:
-            self.root_dir, self.dirs, self.files = os.walk(os.path.join(self.root_dir, 'test/')).__next__()
+            self.root_dir, self.dirs, self.files = os.walk(os.path.join(root_dir, 'test/')).__next__()
         self.transform = transform
 
     def __len__(self):

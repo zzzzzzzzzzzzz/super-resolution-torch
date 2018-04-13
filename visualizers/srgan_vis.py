@@ -10,9 +10,8 @@ from transforms.torgb import ToRGB
 
 class Visualizer:
     def __init__(self, show_step=10, image_size=30):
-        self.transform = transforms.Compose([transforms.ToPILImage(),
-                                             ToRGB(),
-                                             transforms.Scale(image_size)])
+        self.transform = transforms.Compose([transforms.ToPILImage(mode='YCbCr'),
+                                             transforms.Resize(image_size)])
 
         self.show_step = show_step
         self.step = 0

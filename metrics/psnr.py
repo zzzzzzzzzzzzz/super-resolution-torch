@@ -9,8 +9,8 @@ def psnr(image_original: np.ndarray, image_restored: np.ndarray):
     :param image_restored:
     :return:
     """
-    check_shape_len = lambda img: len(img.shpae) == 3
-    check_shape_order = lambda img: (img.shape[0] < img.shape[1]) and (img.shape[0] < img[2])
+    check_shape_len = lambda img: len(img.shape) == 3
+    check_shape_order = lambda img: (img.shape[0] < img.shape[1]) and (img.shape[0] < img.shape[2])
 
     assert check_shape_len(image_original), "Original image must be in (C,H,W) format"
     assert check_shape_order(image_original), "Original image must be in (C,H,W) format"
@@ -24,7 +24,7 @@ def psnr(image_original: np.ndarray, image_restored: np.ndarray):
     for i in range(image_original.shape[0]):
         denominator += np.sum((image_original[i] - image_restored[i]) ** 2)
 
-    denominator = np.sqrt((1.0 / image_original.shape[1]*image_original.shape[2])*denominator)
-    numerator = np.max(image_original)
+    denominator = np.sqrt((1.0 / 3*image_original.shape[1]*image_original.shape[2])*denominator)
+    numerator = 255
     val = 20 * np.log10(numerator/denominator)
     return val

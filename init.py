@@ -166,11 +166,11 @@ class Infrastructure(object):
         opt_array = sorted(opt_array)
 
         str_to_hash = ""
-
+        opt_values = []
         for arg in opt_array:
-            str_to_hash += getattr(options, arg)
+            opt_values.append(getattr(options, arg))
 
-        experiment_id = hashlib.md5(str_to_hash).hexdigest()
+        experiment_id = hashlib.md5(json.dumps(opt_values).encode('utf-8')).hexdigest()
         c = self.conn.cursor()
         c.execute('''
                      SELECT 
@@ -179,49 +179,50 @@ class Infrastructure(object):
                           experiments
                      WHERE
                           idmd5 = ?
-                  ''', experiment_id)
+                  ''', (experiment_id,))
 
         if c.fetchone():
             text = ''
-            while (text != 'y') or (text != 'n'):
+            while (text != 'y') and (text != 'n'):
                 text = str(
-                    input("It seems like you've already launched such experiment. Do you want to continue?[y/n]:"))
-            if text.lower() == 'y':
+                    input("It seems like you've already launched such experiment: {}. Do you want to continue?[y/n]:".format(experiment_id))).lower()
+            if text == 'y':
                 print("Ok will start this experiment...")
             else:
                 print("Then change some start parameters and restart")
                 exit(0)
-        else:
-            try:
-                c.execute('''
-                             INSERT INTO experiments (idmd5, model_id, dataset_id, train_params, description, dt) 
-                             SELECT 
-                              ?, t1.id as model_id, t2.id as dataset_id, ?, ?, ?
+        # init experiment and return experiment id
+        cr_time = datetime.datetime.now()
+        try:
+            c.execute('''
+                         INSERT INTO experiments (idmd5, model_id, dataset_id, train_params, description, dt) 
+                         SELECT 
+                          ?, t1.id as model_id, t2.id as dataset_id, ?, ?, ?
+                         FROM
+                             (SELECT 
+                               id 
                              FROM
-                                 (SELECT 
-                                   id 
-                                 FROM
-                                   models
-                                 WHERE name=?) AS t1,
-                                 (SELECT 
-                                   id 
-                                 FROM
-                                   datasets
-                                 WHERE name=?) AS t2
-                        
-                          ''',
-                          (experiment_id,
-                           json.dumps(vars(options)),
-                           options.description,
-                           datetime.datetime.now(),
-                           options.model,
-                           options.dataset))
-                self.conn.commit()
-            except sqlite3.Error as e:
-                print("Experiment registration failed")
-                raise e
+                               models
+                             WHERE name=?) AS t1,
+                             (SELECT 
+                               id 
+                             FROM
+                               datasets
+                             WHERE name=?) AS t2
+                    
+                      ''',
+                      (experiment_id,
+                       json.dumps(vars(options)),
+                       options.description,
+                       cr_time,
+                       options.model,
+                       options.dataset))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            print("Experiment registration failed")
+            raise e
 
-            return experiment_id
+        return (experiment_id, cr_time)
 
 
 if __name__ == '__main__':

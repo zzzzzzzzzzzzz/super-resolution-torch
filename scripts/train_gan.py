@@ -1,38 +1,35 @@
 # coding: utf-8
 
 import argparse
-
 import os
 import sqlite3
-import time
 import sys
+import time
 
-import numpy as np
 import torch
-import torchvision
 import torch.nn as nn
 import torch.optim as optim
-from torch.autograd import Variable
-from torchvision import transforms
+import torchvision
 from tensorboard_logger import configure, log_value
+from torch.autograd import Variable
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
 from init import Infrastructure
-from metrics.psnr import psnr
-from metrics.ssim import ssim
 from models.srgan import Generator, Discriminator, FeatureExtractor
 from transforms.myrandomsample import MyRandomSample
 from transforms.myresize import MyResize
 from transforms.totensor import MyToTensor
 from transforms.toycbcr import ToYCbCr
-from torch.utils.data import DataLoader
-
 from utils.find_klass_in_folder import find_klass
+from utils.write_metrics import write_metrics
 from visualizers.srgan_vis import Visualizer
 
 infra = Infrastructure()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--dataset', type=str, default='mixed-flowers-berkley', help='One of the datasets listed in your database')
+parser.add_argument('--model', type=str, help="One of the models listed in your database")
 parser.add_argument('--workers', type=int, default=2, help='number of data loading workers')
 parser.add_argument('--batchSize', type=int, default=16, help='input batch size')
 parser.add_argument('--imageSize', type=int, default=16, help='the low resolution image size')
@@ -51,10 +48,11 @@ parser.add_argument('--pretrainGenerator', type=int, default=1, help='Pretrain g
 parser.add_argument('--pretrainGeneratorEpochs', type=int, default=2, help='Number of epochs for generator pretrain')
 parser.add_argument('--generatorLatentLossWeight', type=float, default=0.006, help='The weight for the loss within features extracted from vgg19')
 parser.add_argument('--generatorAdversarialLossWeight', type=float, default=1e-3, help='The weight of adversarial loss (when fake data is input for discriminator with labels saying that the data is real')
+parser.add_argument('--description', type=str, help="The description of experiment. It's purpose")
 
 opt = parser.parse_args()
 print(opt)
-experiment_id = infra.init_experiment(opt)
+(experiment_id, cr_date) = infra.init_experiment(opt)
 start = time.time()
 print("Searching for dataset...")
 dataset_klass = None
@@ -63,7 +61,7 @@ try:
     c = infra.conn.cursor()
     c.execute('''
                  SELECT classname, path FROM datasets WHERE name=?
-              ''', opt.dataset)
+              ''', (opt.dataset,))
     classname, dataset_root = c.fetchone()
     dataset_klass = find_klass(infra.datasets_path, classname)
     infra.conn.commit()
@@ -74,7 +72,7 @@ except sqlite3.Error:
 print("Starting experiment {}".format(experiment_id))
 
 try:
-    os.makedirs(opt.out)
+    os.makedirs('{}/{}/{}/'.format(infra.snapshots_path, experiment_id, cr_date))
 except OSError:
     pass
 
@@ -121,7 +119,7 @@ optim_generator = optim.Adam(generator.parameters(), lr=opt.generatorLR)
 optim_discriminator = optim.Adam(discriminator.parameters(), lr=opt.discriminatorLR)
 
 
-configure('{}/{}/{}/'.format(infra.logs_path, os.path.basename(__file__), experiment_id), flush_secs=5)
+configure('{}/{}/{}/{}/'.format(infra.logs_path, os.path.basename(__file__), experiment_id, cr_date), flush_secs=5)
 visualizer = Visualizer(image_size=opt.imageSize*opt.upSampling)
 
 # Pre-train generator using raw MSE loss
@@ -156,13 +154,13 @@ if opt.pretrainGenerator:
             visualizer.show(lr, high_res_real.cpu().data, high_res_fake.cpu().data)
 
         sys.stdout.write('\r[%d/%d][%d/%d] Generator_MSE_Loss: %.4f\n' % (
-        epoch, opt.pretrainGeneratorEpochs, i, len(dataloader), mean_generator_content_loss / len(dataloader)))
+        epoch, opt.pretrainGeneratorEpochs, len(dataloader), len(dataloader), mean_generator_content_loss / len(dataloader)))
         log_value('generator_mse_loss', mean_generator_content_loss / len(dataloader), epoch)
 else:
     sys.stdout.write("Skipping generator pretrain phase")
 
 # Do checkpointing
-torch.save(generator.state_dict(), '{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id))
+torch.save(generator.state_dict(), '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id, cr_date))
 
 
 # SRGAN training
@@ -170,178 +168,92 @@ optim_generator = optim.Adam(generator.parameters(), lr=opt.generatorLR)
 optim_discriminator = optim.Adam(discriminator.parameters(), lr=opt.discriminatorLR)
 
 print('SRGAN training')
-for epoch in range(opt.nEpochs):
-    mean_generator_content_loss = 0.0
-    mean_generator_adversarial_loss = 0.0
-    mean_generator_total_loss = 0.0
-    mean_discriminator_loss = 0.0
+try:
+    for epoch in range(opt.nEpochs):
+        mean_generator_content_loss = 0.0
+        mean_generator_adversarial_loss = 0.0
+        mean_generator_total_loss = 0.0
+        mean_discriminator_loss = 0.0
 
-    for i, data in enumerate(dataloader):
+        for i, data in enumerate(dataloader):
 
-        lr, hr = data
+            lr, hr = data
 
-        # Generate real and fake inputs
-        if opt.cuda:
-            high_res_real = Variable(high_res_real.cuda())
-            high_res_fake = generator(Variable(lr).cuda())
-            # target_real = Variable(torch.rand(opt.batchSize, 1) * 0.5 + 0.7).cuda()
-            target_real = Variable(torch.ones(opt.batchSize, 1)).cuda()
-            # target_fake = Variable(torch.rand(opt.batchSize, 1) * 0.3).cuda()
-            target_fake = Variable(torch.zeros(opt.batchSize, 1)).cuda()
-        else:
-            high_res_real = Variable(high_res_real)
-            high_res_fake = generator(Variable(lr))
-            # target_real = Variable(torch.rand(opt.batchSize, 1) * 0.5 + 0.7)
-            target_real = Variable(torch.ones(opt.batchSize, 1))
-            # target_fake = Variable(torch.rand(opt.batchSize, 1) * 0.3)
-            target_fake = Variable(torch.zeros(opt.batchSize, 1))
+            # Generate real and fake inputs
+            if opt.cuda:
+                high_res_real = Variable(high_res_real.cuda())
+                high_res_fake = generator(Variable(lr).cuda())
+                # target_real = Variable(torch.rand(opt.batchSize, 1) * 0.5 + 0.7).cuda()
+                target_real = Variable(torch.ones(opt.batchSize, 1)).cuda()
+                # target_fake = Variable(torch.rand(opt.batchSize, 1) * 0.3).cuda()
+                target_fake = Variable(torch.zeros(opt.batchSize, 1)).cuda()
+            else:
+                high_res_real = Variable(high_res_real)
+                high_res_fake = generator(Variable(lr))
+                # target_real = Variable(torch.rand(opt.batchSize, 1) * 0.5 + 0.7)
+                target_real = Variable(torch.ones(opt.batchSize, 1))
+                # target_fake = Variable(torch.rand(opt.batchSize, 1) * 0.3)
+                target_fake = Variable(torch.zeros(opt.batchSize, 1))
 
-        ######### Train discriminator #########
-        discriminator.zero_grad()
+            ######### Train discriminator #########
+            discriminator.zero_grad()
 
-        discriminator_loss = adversarial_criterion(discriminator(high_res_real), target_real) + \
-                             adversarial_criterion(discriminator(Variable(high_res_fake.data)), target_fake)
-        mean_discriminator_loss += discriminator_loss.data[0]
+            discriminator_loss = adversarial_criterion(discriminator(high_res_real), target_real) + \
+                                 adversarial_criterion(discriminator(Variable(high_res_fake.data)), target_fake)
+            mean_discriminator_loss += discriminator_loss.data[0]
 
-        discriminator_loss.backward()
-        optim_discriminator.step()
+            discriminator_loss.backward()
+            optim_discriminator.step()
 
-        ######### Train generator #########
-        generator.zero_grad()
+            ######### Train generator #########
+            generator.zero_grad()
 
-        real_features = Variable(feature_extractor(high_res_real).data)
-        fake_features = feature_extractor(high_res_fake)
+            real_features = Variable(feature_extractor(high_res_real).data)
+            fake_features = feature_extractor(high_res_fake)
 
-        generator_content_loss = content_criterion(high_res_fake, high_res_real) + opt.generatorLatentLossWeight * content_criterion(
-            fake_features, real_features)
-        mean_generator_content_loss += generator_content_loss.data[0]
-        generator_adversarial_loss = adversarial_criterion(discriminator(high_res_fake), ones_const)
-        mean_generator_adversarial_loss += generator_adversarial_loss.data[0]
+            generator_content_loss = content_criterion(high_res_fake, high_res_real) + opt.generatorLatentLossWeight * content_criterion(
+                fake_features, real_features)
+            mean_generator_content_loss += generator_content_loss.data[0]
+            generator_adversarial_loss = adversarial_criterion(discriminator(high_res_fake), ones_const)
+            mean_generator_adversarial_loss += generator_adversarial_loss.data[0]
 
-        generator_total_loss = generator_content_loss + opt.generatorAdversarialLossWeight * generator_adversarial_loss
-        mean_generator_total_loss += generator_total_loss.data[0]
+            generator_total_loss = generator_content_loss + opt.generatorAdversarialLossWeight * generator_adversarial_loss
+            mean_generator_total_loss += generator_total_loss.data[0]
 
-        generator_total_loss.backward()
-        optim_generator.step()
+            generator_total_loss.backward()
+            optim_generator.step()
 
-        ######### Status and display #########
+            ######### Status and display #########
+            sys.stdout.write(
+                '\r[%d/%d][%d/%d] Discriminator_Loss: %.4f Generator_Loss (Content/Advers/Total): %.4f/%.4f/%.4f' % (
+                epoch, opt.nEpochs, i, len(dataloader),
+                discriminator_loss.data[0], generator_content_loss.data[0], generator_adversarial_loss.data[0],
+                generator_total_loss.data[0]))
+            visualizer.show(lr, high_res_real.cpu().data, high_res_fake.cpu().data)
+
         sys.stdout.write(
-            '\r[%d/%d][%d/%d] Discriminator_Loss: %.4f Generator_Loss (Content/Advers/Total): %.4f/%.4f/%.4f' % (
-            epoch, opt.nEpochs, i, len(dataloader),
-            discriminator_loss.data[0], generator_content_loss.data[0], generator_adversarial_loss.data[0],
-            generator_total_loss.data[0]))
-        visualizer.show(lr, high_res_real.cpu().data, high_res_fake.cpu().data)
+            '\r[%d/%d][%d/%d] Discriminator_Loss: %.4f Generator_Loss (Content/Advers/Total): %.4f/%.4f/%.4f\n' % (
+            epoch, opt.nEpochs, len(dataloader), len(dataloader),
+            mean_discriminator_loss / len(dataloader), mean_generator_content_loss / len(dataloader),
+            mean_generator_adversarial_loss / len(dataloader), mean_generator_total_loss / len(dataloader)))
 
-    sys.stdout.write(
-        '\r[%d/%d][%d/%d] Discriminator_Loss: %.4f Generator_Loss (Content/Advers/Total): %.4f/%.4f/%.4f\n' % (
-        epoch, opt.nEpochs, i, len(dataloader),
-        mean_discriminator_loss / len(dataloader), mean_generator_content_loss / len(dataloader),
-        mean_generator_adversarial_loss / len(dataloader), mean_generator_total_loss / len(dataloader)))
+        log_value('generator_content_loss', mean_generator_content_loss / len(dataloader), epoch)
+        log_value('generator_adversarial_loss', mean_generator_adversarial_loss / len(dataloader), epoch)
+        log_value('generator_total_loss', mean_generator_total_loss / len(dataloader), epoch)
+        log_value('discriminator_loss', mean_discriminator_loss / len(dataloader), epoch)
 
-    log_value('generator_content_loss', mean_generator_content_loss / len(dataloader), epoch)
-    log_value('generator_adversarial_loss', mean_generator_adversarial_loss / len(dataloader), epoch)
-    log_value('generator_total_loss', mean_generator_total_loss / len(dataloader), epoch)
-    log_value('discriminator_loss', mean_discriminator_loss / len(dataloader), epoch)
-
-    # Do checkpointing
-    torch.save(generator.state_dict(), '{}/{}/generator_final.pth'.format(infra.snapshots_path, experiment_id))
-    torch.save(discriminator.state_dict(), '{}/{}/discriminator_final.pth'.format(infra.snapshots_path, experiment_id))
+        # Do checkpointing
+        torch.save(generator.state_dict(), '{}/{}/{}/generator_final.pth'.format(infra.snapshots_path, experiment_id, cr_date))
+        torch.save(discriminator.state_dict(), '{}/{}/{}/discriminator_final.pth'.format(infra.snapshots_path, experiment_id, cr_date))
+except KeyboardInterrupt:
+    print("Keyboard interrupt. Writing metrics...")
+    write_metrics(infra, generator, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date)
+    print("Exiting...")
+    exit(0)
 
 end = time.time()
 
-dataloader_test = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
-                        batch_size=1, num_workers=1)
-
-psnrs = []
-for i, data in enumerate(dataloader_test):
-    lr, hr = data
-
-    if opt.cuda:
-        high_res_real = Variable(hr.cuda())
-        high_res_fake = generator(Variable(lr).cuda())
-    else:
-        high_res_real = Variable(hr)
-        high_res_fake = generator(Variable(lr))
-
-    psnrs.append(psnr(high_res_real.data.numpy(), high_res_fake.data.numpy()))
-
-mean_psnr = np.mean(psnrs)
-ssims = []
-for i, data in enumerate(dataloader_test):
-    lr, hr = data
-
-    if opt.cuda:
-        high_res_real = Variable(hr.cuda())
-        high_res_fake = generator(Variable(lr).cuda())
-    else:
-        high_res_real = Variable(hr)
-        high_res_fake = generator(Variable(lr))
-
-    ssims.append(ssim(high_res_real.data.numpy(), high_res_fake.data.numpy()))
-
-mean_ssim = np.mean(ssims)
-
-try:
-    c = infra.conn.cursor()
-    c.execute('''
-                 INSERT INTO metric_values (experiment_id, metric_id, value) 
-                 SELECT
-                  t1.id as experiment_id,
-                  t2.id as metric_id,
-                  ?
-                 FROM
-                  (SELECT 
-                       id 
-                   FROM
-                       experiments
-                   WHERE idmd5=?) AS t1,
-                  (SELECT 
-                       id 
-                   FROM
-                       metrics
-                   WHERE name=?) AS t2
-              ''', (mean_psnr, experiment_id, 'psnr'))
-    c.execute('''
-                 INSERT INTO metric_values (experiment_id, metric_id, value) 
-                 SELECT
-                  t1.id as experiment_id,
-                  t2.id as metric_id,
-                  ?
-                 FROM
-                  (SELECT 
-                       id 
-                   FROM
-                       experiments
-                   WHERE idmd5=?) AS t1,
-                  (SELECT 
-                       id 
-                   FROM
-                       metrics
-                   WHERE name=?) AS t2
-              ''', (mean_ssim, experiment_id, 'ssim'))
-    c.execute('''
-                 INSERT INTO metric_values (experiment_id, metric_id, value) 
-                 SELECT
-                  t1.id as experiment_id,
-                  t2.id as metric_id,
-                  ?
-                 FROM
-                  (SELECT 
-                       id 
-                   FROM
-                       experiments
-                   WHERE idmd5=?) AS t1,
-                  (SELECT 
-                       id 
-                   FROM
-                       metrics
-                   WHERE name=?) AS t2
-              ''', (end-start, experiment_id, 'time'))
-    infra.conn.commit()
-except sqlite3.Error:
-    print("Error in writing metrics to db, exiting...")
-    exit(-1)
-
+write_metrics(infra, generator, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date)
 
 # Avoid closing
 while True:
