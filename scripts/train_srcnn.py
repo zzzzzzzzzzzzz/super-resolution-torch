@@ -59,7 +59,7 @@ except sqlite3.Error:
     exit(-1)
 
 try:
-    os.makedirs('{}/{}/{}/'.format(infra.snapshots_path, experiment_id, cr_date))
+    os.makedirs('{}/{}/{}/'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
 except OSError:
     pass
 
@@ -91,7 +91,7 @@ if opt.cuda:
 
 optim_srcnn = optim.Adam(model.parameters(), lr=opt.lr)
 
-configure('{}/{}/{}/{}/'.format(infra.logs_path, os.path.basename(__file__), experiment_id, cr_date), flush_secs=5)
+configure('{}/{}/{}/{}/'.format(infra.logs_path, os.path.basename(__file__), experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)), flush_secs=5)
 visualizer = Visualizer(image_size=opt.imageSize * opt.upSampling)
 try:
     for epoch in range(opt.nEpochs):  # loop over the dataset multiple times
@@ -127,7 +127,7 @@ try:
         log_value('model_mse_loss_epoch', mean_loss / len(dataloader), epoch)
         # Do checkpointing every epoch
         torch.save(model.state_dict(),
-                   '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id, cr_date))
+                   '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
 except KeyboardInterrupt:
     print("Keyboard interrupt. Writing metrics...")
     write_metrics(infra, model, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date)

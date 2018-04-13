@@ -72,7 +72,7 @@ except sqlite3.Error:
 print("Starting experiment {}".format(experiment_id))
 
 try:
-    os.makedirs('{}/{}/{}/'.format(infra.snapshots_path, experiment_id, cr_date))
+    os.makedirs('{}/{}/{}/'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
 except OSError:
     pass
 
@@ -119,7 +119,7 @@ optim_generator = optim.Adam(generator.parameters(), lr=opt.generatorLR)
 optim_discriminator = optim.Adam(discriminator.parameters(), lr=opt.discriminatorLR)
 
 
-configure('{}/{}/{}/{}/'.format(infra.logs_path, os.path.basename(__file__), experiment_id, cr_date), flush_secs=5)
+configure('{}/{}/{}/{}/'.format(infra.logs_path, os.path.basename(__file__), experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)), flush_secs=5)
 visualizer = Visualizer(image_size=opt.imageSize*opt.upSampling)
 
 # Pre-train generator using raw MSE loss
@@ -160,7 +160,7 @@ else:
     sys.stdout.write("Skipping generator pretrain phase")
 
 # Do checkpointing
-torch.save(generator.state_dict(), '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id, cr_date))
+torch.save(generator.state_dict(), '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
 
 
 # SRGAN training
@@ -243,8 +243,8 @@ try:
         log_value('discriminator_loss', mean_discriminator_loss / len(dataloader), epoch)
 
         # Do checkpointing
-        torch.save(generator.state_dict(), '{}/{}/{}/generator_final.pth'.format(infra.snapshots_path, experiment_id, cr_date))
-        torch.save(discriminator.state_dict(), '{}/{}/{}/discriminator_final.pth'.format(infra.snapshots_path, experiment_id, cr_date))
+        torch.save(generator.state_dict(), '{}/{}/{}/generator_final.pth'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
+        torch.save(discriminator.state_dict(), '{}/{}/{}/discriminator_final.pth'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
 except KeyboardInterrupt:
     print("Keyboard interrupt. Writing metrics...")
     write_metrics(infra, generator, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date)
