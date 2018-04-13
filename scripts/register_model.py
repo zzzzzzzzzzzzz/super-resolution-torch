@@ -2,7 +2,7 @@
 
 # TODO: hope someday it will do some useful work. Myabe implementing general runner is the good idea?
 import sys
-sys.path.append('..')
+sys.path.append('.')
 import argparse
 from init import Infrastructure
 

@@ -13,7 +13,7 @@ class Infrastructure(object):
     It's also decompress all archives to corresponding folders (in future)
     """
     GLOBAL_PATH = os.path.dirname(os.path.abspath(__file__))
-    DATETIME_FORMAT_STR = '%Y-%m-%d %H.%M.%s'
+    DATETIME_FORMAT_STR = '%Y-%m-%d %H-%M-%s'
 
     def __init__(self, dbname='db.sqlite3', *args, **kwargs):
         self.conn = sqlite3.connect(os.path.join(self.GLOBAL_PATH, dbname))

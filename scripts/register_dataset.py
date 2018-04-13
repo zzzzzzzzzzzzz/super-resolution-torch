@@ -7,7 +7,7 @@ import json
 import os
 import re
 import sys
-sys.path.append('..')
+sys.path.append('.')
 
 from torch.utils.data import Dataset
 
