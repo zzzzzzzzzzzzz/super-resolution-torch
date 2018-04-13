@@ -5,7 +5,7 @@ import os
 import sqlite3
 import sys
 import time
-
+sys.path.append('..')
 import torch
 import torch.optim as optim
 from tensorboard_logger import configure, log_value

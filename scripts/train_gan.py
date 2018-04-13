@@ -5,7 +5,7 @@ import os
 import sqlite3
 import sys
 import time
-
+sys.path.append('..')
 import torch
 import torch.nn as nn
 import torch.optim as optim

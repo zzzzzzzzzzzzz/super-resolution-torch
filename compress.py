@@ -1,4 +1,6 @@
 # coding: utf-8
+import sys
+sys.path.append('..')
 from init import Infrastructure
 
 if __name__=="__main__":

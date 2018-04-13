@@ -6,6 +6,8 @@ import argparse
 import json
 import os
 import re
+import sys
+sys.path.append('..')
 
 from torch.utils.data import Dataset
 
