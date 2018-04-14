@@ -79,7 +79,7 @@ if __name__ == '__main__':
 
     try:
         os.makedirs(
-            '{}/{}/{}/'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
+            '{}/{}/{}/{}/'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
     except OSError:
         pass
 
@@ -165,7 +165,7 @@ if __name__ == '__main__':
         sys.stdout.write("Skipping generator pretrain phase")
 
     # Do checkpointing
-    torch.save(generator.state_dict(), '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id,
+    torch.save(generator.state_dict(), '{}/{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id,
                                                                                 cr_date.strftime(
                                                                                     infra.DATETIME_FORMAT_STR)))
 
@@ -184,22 +184,23 @@ if __name__ == '__main__':
             for i, data in enumerate(dataloader):
 
                 lr, hr = data
+                hr_len = len(hr)
 
                 # Generate real and fake inputs
                 if opt.cuda:
                     high_res_real = Variable(hr.cuda())
                     high_res_fake = generator(Variable(lr).cuda())
                     # target_real = Variable(torch.rand(opt.batchSize, 1) * 0.5 + 0.7).cuda()
-                    target_real = Variable(torch.ones(opt.batchSize, 1)).cuda()
+                    target_real = Variable(torch.ones(hr_len, 1)).cuda()
                     # target_fake = Variable(torch.rand(opt.batchSize, 1) * 0.3).cuda()
-                    target_fake = Variable(torch.zeros(opt.batchSize, 1)).cuda()
+                    target_fake = Variable(torch.zeros(hr_len, 1)).cuda()
                 else:
                     high_res_real = Variable(hr)
                     high_res_fake = generator(Variable(lr))
                     # target_real = Variable(torch.rand(opt.batchSize, 1) * 0.5 + 0.7)
-                    target_real = Variable(torch.ones(len(hr),1))
+                    target_real = Variable(torch.ones(hr_len,1))
                     # target_fake = Variable(torch.rand(opt.batchSize, 1) * 0.3)
-                    target_fake = Variable(torch.zeros(len(hr),1))
+                    target_fake = Variable(torch.zeros(hr_len,1))
 
                 ######### Train discriminator #########
                 discriminator.zero_grad()
@@ -250,10 +251,10 @@ if __name__ == '__main__':
 
             # Do checkpointing
             torch.save(generator.state_dict(),
-                       '{}/{}/{}/generator_final.pth'.format(infra.snapshots_path, experiment_id,
+                       '{}/{}/{}/{}/generator_final.pth'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id,
                                                              cr_date.strftime(infra.DATETIME_FORMAT_STR)))
             torch.save(discriminator.state_dict(),
-                       '{}/{}/{}/discriminator_final.pth'.format(infra.snapshots_path, experiment_id,
+                       '{}/{}/{}/{}/discriminator_final.pth'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id,
                                                                  cr_date.strftime(infra.DATETIME_FORMAT_STR)))
     except KeyboardInterrupt:
         print("Keyboard interrupt. Writing metrics...")
