@@ -1,10 +1,11 @@
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
 
-def swish(x): # another activation function
+def swish(x):  # another activation function
     return x * F.sigmoid(x)
 
 
@@ -18,6 +19,8 @@ class FeatureExtractor(nn.Module):
 
 
 class residualBlock(nn.Module):
+    prelu_slope = Variable(torch.FloatTensor([0.25]), requires_grad=True)
+
     def __init__(self, in_channels=64, k=3, n=64, s=1):
         super(residualBlock, self).__init__()
 
@@ -27,22 +30,27 @@ class residualBlock(nn.Module):
         self.bn2 = nn.BatchNorm2d(n)
 
     def forward(self, x):
-        y = nn.PReLU(self.bn1(self.conv1(x)))
+        y = F.prelu(self.bn1(self.conv1(x)), self.prelu_slope)
         return self.bn2(self.conv2(y)) + x
 
 
 class upsampleBlock(nn.Module):
     # Implements resize-convolution
+    prelu_slope = Variable(torch.FloatTensor([0.25]), requires_grad=True)  # use different variables for each prelu
+
     def __init__(self, in_channels, out_channels):
         super(upsampleBlock, self).__init__()
         self.conv = nn.Conv2d(in_channels, out_channels, 3, stride=1, padding=1)
         self.shuffler = nn.PixelShuffle(2)
 
     def forward(self, x):
-        return nn.PReLU(self.shuffler(self.conv(x)))
+        return F.prelu(self.shuffler(self.conv(x)), self.prelu_slope)
 
 
 class Generator(nn.Module):
+    prelu_slope = Variable(torch.FloatTensor([0.25]),
+                           requires_grad=True)  # initial prelu slope is 0.25, maybe it's better to use nn.PReLU?
+
     def __init__(self, n_residual_blocks, upsample_factor):
         super(Generator, self).__init__()
         self.n_residual_blocks = n_residual_blocks
@@ -62,7 +70,7 @@ class Generator(nn.Module):
         self.conv3 = nn.Conv2d(64, 3, 9, stride=1, padding=4)
 
     def forward(self, x):
-        x = nn.PReLU(self.conv1(x))
+        x = F.prelu(self.conv1(x), self.prelu_slope)
 
         y = x.clone()
         for i in range(self.n_residual_blocks):
@@ -100,15 +108,15 @@ class Discriminator(nn.Module):
         self.conv9 = nn.Conv2d(512, 1, 1, stride=1, padding=1)
 
     def forward(self, x):
-        x = nn.LeakyReLU(self.conv1(x))
+        x = F.leaky_relu(self.conv1(x))
 
-        x = nn.LeakyReLU(self.bn2(self.conv2(x)))
-        x = nn.LeakyReLU(self.bn3(self.conv3(x)))
-        x = nn.LeakyReLU(self.bn4(self.conv4(x)))
-        x = nn.LeakyReLU(self.bn5(self.conv5(x)))
-        x = nn.LeakyReLU(self.bn6(self.conv6(x)))
-        x = nn.LeakyReLU(self.bn7(self.conv7(x)))
-        x = nn.LeakyReLU(self.bn8(self.conv8(x)))
+        x = F.leaky_relu(self.bn2(self.conv2(x)))
+        x = F.leaky_relu(self.bn3(self.conv3(x)))
+        x = F.leaky_relu(self.bn4(self.conv4(x)))
+        x = F.leaky_relu(self.bn5(self.conv5(x)))
+        x = F.leaky_relu(self.bn6(self.conv6(x)))
+        x = F.leaky_relu(self.bn7(self.conv7(x)))
+        x = F.leaky_relu(self.bn8(self.conv8(x)))
 
         x = self.conv9(x)
         return F.sigmoid(F.avg_pool2d(x, x.size()[2:])).view(x.size()[0], -1)

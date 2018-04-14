@@ -30,6 +30,7 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, default='mixed-flowers-berkley',
                         help='One of the datasets listed in your database')
     parser.add_argument('--model', type=str, help="One of the models listed in your database")
+    parser.add_argument('--depthFactor', type=int, default=1, help="Multiply number of filter by this number")
     parser.add_argument('--workers', type=int, default=2, help='number of data loading workers')
     parser.add_argument('--batchSize', type=int, default=16, help='input batch size')
     parser.add_argument('--imageSize', type=int, default=16, help='the low resolution image size')
