@@ -258,13 +258,13 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         print("Keyboard interrupt. Writing metrics...")
         write_metrics(infra, generator, dataset_klass, dataset_root, transform, time.time() - start, experiment_id,
-                      cr_date)
+                      cr_date, opt.cuda)
         print("Exiting...")
         exit(0)
 
     end = time.time()
 
-    write_metrics(infra, generator, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date)
+    write_metrics(infra, generator, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date, opt.cuda)
 
     # Avoid closing
     text = ''

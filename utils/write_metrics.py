@@ -9,15 +9,19 @@ from metrics.psnr import psnr
 from metrics.ssim import ssim
 
 
-def write_metrics(infra, model, dataset_klass, dataset_root, transform, time_delta, experiment_id, cr_date):
+def write_metrics(infra, model, dataset_klass, dataset_root, transform, time_delta, experiment_id, cr_date, cuda=False):
     dataloader_test = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
                                  batch_size=1, num_workers=1)
     psnrs = []
     for i, data in enumerate(dataloader_test):
         lr, hr = data
 
-        high_res_real = Variable(hr)
-        high_res_fake = model(Variable(lr))
+        if cuda:
+            high_res_real = Variable(hr).cuda()
+            high_res_fake = model(Variable(lr)).cuda()
+        else:
+            high_res_real = Variable(hr)
+            high_res_fake = model(Variable(lr))
 
         psnrs.append(psnr(high_res_real.data.numpy()[0], high_res_fake.data.numpy()[0]))
 
@@ -26,8 +30,12 @@ def write_metrics(infra, model, dataset_klass, dataset_root, transform, time_del
     for i, data in enumerate(dataloader_test):
         lr, hr = data
 
-        high_res_real = Variable(hr)
-        high_res_fake = model(Variable(lr))
+        if cuda:
+            high_res_real = Variable(hr).cuda()
+            high_res_fake = model(Variable(lr)).cuda()
+        else:
+            high_res_real = Variable(hr)
+            high_res_fake = model(Variable(lr))
 
         ssims.append(ssim(high_res_real.data.numpy()[0], high_res_fake.data.numpy()[0]))
 

@@ -132,13 +132,13 @@ if __name__ == '__main__':
                        '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
     except KeyboardInterrupt:
         print("Keyboard interrupt. Writing metrics...")
-        write_metrics(infra, model, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date)
+        write_metrics(infra, model, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date, opt.cuda)
         print("Exiting...")
         exit(0)
 
     end = time.time()
 
-    write_metrics(infra, model, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date)
+    write_metrics(infra, model, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date, opt.cuda)
 
     # Avoid closing
     text = ''
