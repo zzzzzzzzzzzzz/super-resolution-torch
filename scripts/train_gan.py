@@ -95,7 +95,7 @@ if __name__ == '__main__':
                             batch_size=opt.batchSize,
                             shuffle=True, num_workers=int(opt.workers))
 
-    generator = Generator(opt.genResLayersNumber, opt.upSampling)
+    generator = Generator(opt.genResLayersNumber, opt.upSampling, opt.cuda)
     if opt.generatorWeights != '':
         generator.load_state_dict(torch.load(opt.generatorWeights))
     print(generator)

@@ -21,9 +21,10 @@ class FeatureExtractor(nn.Module):
 class residualBlock(nn.Module):
     prelu_slope = Variable(torch.FloatTensor([0.25]), requires_grad=True)
 
-    def __init__(self, in_channels=64, k=3, n=64, s=1):
+    def __init__(self, in_channels=64, k=3, n=64, s=1, cuda=False):
         super(residualBlock, self).__init__()
-
+        if cuda:
+            self.prelu_slope = self.prelu_slope.cuda()
         self.conv1 = nn.Conv2d(in_channels, n, k, stride=s, padding=1)
         self.bn1 = nn.BatchNorm2d(n)
         self.conv2 = nn.Conv2d(n, n, k, stride=s, padding=1)
@@ -38,8 +39,10 @@ class upsampleBlock(nn.Module):
     # Implements resize-convolution
     prelu_slope = Variable(torch.FloatTensor([0.25]), requires_grad=True)  # use different variables for each prelu
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, cuda=False):
         super(upsampleBlock, self).__init__()
+        if cuda:
+            self.prelu_slope = self.prelu_slope.cuda()
         self.conv = nn.Conv2d(in_channels, out_channels, 3, stride=1, padding=1)
         self.shuffler = nn.PixelShuffle(2)
 
@@ -51,7 +54,9 @@ class Generator(nn.Module):
     prelu_slope = Variable(torch.FloatTensor([0.25]),
                            requires_grad=True)  # initial prelu slope is 0.25, maybe it's better to use nn.PReLU?
 
-    def __init__(self, n_residual_blocks, upsample_factor):
+    def __init__(self, n_residual_blocks, upsample_factor, cuda=False):
+        if cuda:
+            self.prelu_slope = self.prelu_slope.cuda()
         super(Generator, self).__init__()
         self.n_residual_blocks = n_residual_blocks
         self.upsample_factor = upsample_factor
@@ -59,13 +64,13 @@ class Generator(nn.Module):
         self.conv1 = nn.Conv2d(3, 64, 9, stride=1, padding=4)
 
         for i in range(self.n_residual_blocks):
-            self.add_module('residual_block' + str(i + 1), residualBlock())
+            self.add_module('residual_block' + str(i + 1), residualBlock(cuda))
 
         self.conv2 = nn.Conv2d(64, 64, 3, stride=1, padding=1)
         self.bn2 = nn.BatchNorm2d(64)
 
         for i in range(int(self.upsample_factor / 2)):
-            self.add_module('upsample' + str(i + 1), upsampleBlock(64, 256))
+            self.add_module('upsample' + str(i + 1), upsampleBlock(64, 256, cuda))
 
         self.conv3 = nn.Conv2d(64, 3, 9, stride=1, padding=4)
 
