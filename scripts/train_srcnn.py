@@ -82,7 +82,7 @@ if __name__ == '__main__':
 
     criterion = torch.nn.MSELoss()
 
-    model = SRcnn()
+    model = SRcnn(depth_factor=opt.depthFactor)
     if opt.weights != '':
         model.load_state_dict(torch.load(opt.weights))
 
