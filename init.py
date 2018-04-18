@@ -26,7 +26,8 @@ class Infrastructure(object):
         self.metrics_path = self.create_folder_or_pass('metrics')
         self.visualizers_path = self.create_folder_or_pass('visualizers')
         self.utils_path = self.create_folder_or_pass('utils')
-        self.compress_folders = ['logs', 'snapshots', 'datasets']
+        self.tests_path = self.create_folder_or_pass('tests')
+        self.compress_folders = ['logs', 'snapshots', 'datasets', 'tests']
 
     def init_structure(self):
         self.create_file_or_pass(os.path.join(self.models_path, '__init__.py'))
@@ -152,7 +153,7 @@ class Infrastructure(object):
         for folder in self.compress_folders:
             print("Decompressing {}".format(folder))
             if os.path.exists('{}.tar.gz'.format(folder)):
-                subprocess.call(['tar -xzf {}.tar.gz -C {}/'.format(folder, folder)])
+                subprocess.call('tar -xzf {}.tar.gz'.format(folder, folder), shell=True)
 
     def init_experiment(self, options):
         """
@@ -172,6 +173,7 @@ class Infrastructure(object):
             opt_values.append(getattr(options, arg))
 
         experiment_id = hashlib.md5(json.dumps(opt_values).encode('utf-8')).hexdigest()
+        experiment_id = options.model + '_' + experiment_id
         c = self.conn.cursor()
         c.execute('''
                      SELECT 
@@ -223,7 +225,43 @@ class Infrastructure(object):
             print("Experiment registration failed")
             raise e
 
-        return (experiment_id, cr_time)
+        return experiment_id, cr_time
+
+    def init_test(self, options):
+        c = self.conn.cursor()
+        opt_dict = vars(options)
+        if ('experimentId' in opt_dict) and opt_dict['experimentId']:
+            try:
+                c.execute('''
+                            SELECT 
+                              id, idmd5, dt
+                            FROM
+                              experiments
+                            WHERE id=?
+                          ''',
+                          (opt_dict['experimentId'],))
+            except sqlite3.Error as e:
+                print("Getting experiment md5 id and cr_time failed")
+                raise e
+        if ('experimentIdMd5' in opt_dict) and opt_dict['experimentIdMd5']:
+            try:
+                c.execute('''
+                            SELECT 
+                              id, idmd5, dt
+                            FROM
+                              experiments
+                            WHERE idmd5=?
+                          ''',
+                          (opt_dict['experimentIdMd5'],))
+            except sqlite3.Error as e:
+                print("Getting experiment cr_time failed")
+                raise e
+        try:
+            id, idmd5, cr_time = c.fetchone()
+            return id, idmd5, cr_time
+        except sqlite3.Error as e:
+            print("You should provide experimentId or experimentIdMd5 to get model klass to use")
+            exit(-1)
 
 
 if __name__ == '__main__':

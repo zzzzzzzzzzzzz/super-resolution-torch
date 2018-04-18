@@ -1,47 +1,11 @@
 # coding: utf-8
 import sqlite3
-
-from torch.autograd import Variable
-from torch.utils.data import DataLoader
-import numpy as np
-
-from metrics.psnr import psnr
-from metrics.ssim import ssim
+from utils.count_metrics import count_metrics
 
 
 def write_metrics(infra, model, dataset_klass, dataset_root, transform, time_delta, experiment_id, cr_date, cuda=False):
-    dataloader_test = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
-                                 batch_size=1, num_workers=1)
-    if cuda:
-        model.cuda()
-    psnrs = []
-    for i, data in enumerate(dataloader_test):
-        lr, hr = data
 
-        if cuda:
-            high_res_real = Variable(hr.cuda())
-            high_res_fake = model(Variable(lr).cuda())
-        else:
-            high_res_real = Variable(hr)
-            high_res_fake = model(Variable(lr))
-
-        psnrs.append(psnr(high_res_real.cpu().data.numpy()[0], high_res_fake.cpu().data.numpy()[0]))
-
-    mean_psnr = np.mean(psnrs)
-    ssims = []
-    for i, data in enumerate(dataloader_test):
-        lr, hr = data
-
-        if cuda:
-            high_res_real = Variable(hr.cuda())
-            high_res_fake = model(Variable(lr).cuda())
-        else:
-            high_res_real = Variable(hr)
-            high_res_fake = model(Variable(lr))
-
-        ssims.append(ssim(high_res_real.cpu().data.numpy()[0], high_res_fake.cpu().data.numpy()[0]))
-
-    mean_ssim = np.mean(ssims)
+    mean_psnr, mean_ssim = count_metrics(dataset_klass, dataset_root, transform, model, cuda)
 
     try:
         c = infra.conn.cursor()

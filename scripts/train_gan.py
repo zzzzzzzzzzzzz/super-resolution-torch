@@ -79,7 +79,7 @@ if __name__ == '__main__':
 
     try:
         os.makedirs(
-            '{}/{}/{}/{}/'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
+            '{}/{}/{}/'.format(infra.snapshots_path, experiment_id, cr_date.strftime(infra.DATETIME_FORMAT_STR)))
     except OSError:
         pass
 
@@ -122,7 +122,7 @@ if __name__ == '__main__':
     optim_generator = optim.Adam(generator.parameters(), lr=opt.generatorLR)
     optim_discriminator = optim.Adam(discriminator.parameters(), lr=opt.discriminatorLR)
 
-    configure('{}/{}/{}/{}/'.format(infra.logs_path, os.path.basename(__file__), experiment_id,
+    configure('{}/{}/{}/'.format(infra.logs_path, experiment_id,
                                     cr_date.strftime(infra.DATETIME_FORMAT_STR)), flush_secs=5)
     visualizer = Visualizer(image_size=opt.imageSize * opt.upSampling)
 
@@ -165,7 +165,7 @@ if __name__ == '__main__':
         sys.stdout.write("Skipping generator pretrain phase")
 
     # Do checkpointing
-    torch.save(generator.state_dict(), '{}/{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id,
+    torch.save(generator.state_dict(), '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id,
                                                                                 cr_date.strftime(
                                                                                     infra.DATETIME_FORMAT_STR)))
 
@@ -251,10 +251,10 @@ if __name__ == '__main__':
 
             # Do checkpointing
             torch.save(generator.state_dict(),
-                       '{}/{}/{}/{}/generator_final.pth'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id,
+                       '{}/{}/{}/generator_final.pth'.format(infra.snapshots_path, experiment_id,
                                                              cr_date.strftime(infra.DATETIME_FORMAT_STR)))
             torch.save(discriminator.state_dict(),
-                       '{}/{}/{}/{}/discriminator_final.pth'.format(infra.snapshots_path, os.path.basename(__file__), experiment_id,
+                       '{}/{}/{}/discriminator_final.pth'.format(infra.snapshots_path, experiment_id,
                                                                  cr_date.strftime(infra.DATETIME_FORMAT_STR)))
     except KeyboardInterrupt:
         print("Keyboard interrupt. Writing metrics...")

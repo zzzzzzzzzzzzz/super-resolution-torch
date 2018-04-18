@@ -19,6 +19,8 @@ def find_klass(where:str, classname:str):
                         return dataset_klass
                 except ImportError as e:
                     continue
+                except AttributeError as e:
+                    continue
 
         if not class_found_flag:
             raise ImportError("Couldn't import dataloader class. Exiting...")
