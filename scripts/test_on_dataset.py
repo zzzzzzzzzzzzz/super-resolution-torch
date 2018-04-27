@@ -1,29 +1,23 @@
 # coding: utf-8
 # TODO: сделать поддержку загрузки класса модели по id эксперимента с теми параметрами, которые были при обучении
 import argparse
+import datetime
+import os
 import sqlite3
 import sys
 
-import os
-
-import numpy as np
 import torch
-from PIL import Image
-import datetime
-from torch.autograd import Variable
 from torch.utils.data import DataLoader
+from torchvision import transforms
 
 from init import Infrastructure
-from metrics.psnr import psnr
-from metrics.ssim import ssim
 from models.srgan import Generator
+from transforms.mycentercrop import MyCenterCrop
 from transforms.myrandomsample import MyRandomSample
 from transforms.myresize import MyResize
 from transforms.totensor import MyToTensor
 from transforms.toycbcr import ToYCbCr
 from utils.find_klass_in_folder import find_klass
-from torchvision import transforms
-
 from utils.save_viz import save_viz
 from utils.write_metrics import count_metrics
 
@@ -125,6 +119,7 @@ if __name__ == '__main__':
     global_psnrs = []
     global_ssims = []
     transform = transforms.Compose([ToYCbCr(),
+                                    MyCenterCrop(size=0),
                                     MyResize(factor=1 / opt.upSampling),
                                     MyToTensor()])
     dataloader = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
