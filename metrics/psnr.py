@@ -22,7 +22,7 @@ def psnr(image_original: np.ndarray, image_restored: np.ndarray):
 
     denominator = 0.0
     for i in range(image_original.shape[0]):
-        denominator += np.sum(np.subtract(np.uint8(image_original[i]),np.uint8(image_restored[i]*255)) ** 2)
+        denominator += np.sum(np.power(np.int32(np.uint8(image_original[i]*255) - np.uint8(image_restored[i]*255)), 2))
 
     denominator = np.sqrt((1.0 / (9*image_original.shape[1]*image_original.shape[2]))*denominator)
     numerator = 255

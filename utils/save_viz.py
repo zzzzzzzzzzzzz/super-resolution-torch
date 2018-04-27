@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 
-def save_viz(path, dataset_klass, dataset_root, transform, model, cuda=False, nEpochs=10):
+def save_viz(path, dataset_klass, dataset_root, transform, model, cuda=False, nEpochs=10, prefix=''):
     dataloader = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
                             batch_size=1, num_workers=1)
     topil = transforms.ToPILImage(mode='YCbCr')
@@ -27,6 +27,6 @@ def save_viz(path, dataset_klass, dataset_root, transform, model, cuda=False, nE
             hrr = high_res_real.cpu().data[0]
             hrf = high_res_fake.cpu().data[0]
             lr = lr.cpu()[0]
-            topil(hrr).save(os.path.join(path, '{}_{}_hr.jpg'.format(epoch, i)))
-            topil(hrf).save(os.path.join(path, '{}_{}_generated.jpg'.format(epoch, i)))
-            topil(lr).save(os.path.join(path, '{}_{}_lr.jpg'.format(epoch, i)))
+            topil(hrr).save(os.path.join(path, prefix+'{}_{}_hr.jpg'.format(epoch, i)))
+            topil(hrf).save(os.path.join(path, prefix+'{}_{}_generated.jpg'.format(epoch, i)))
+            topil(lr).save(os.path.join(path, prefix+'{}_{}_lr.jpg'.format(epoch, i)))

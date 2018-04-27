@@ -61,10 +61,11 @@ if __name__ == '__main__':
 
     weights_file_path = ''
     if isinstance(cr_date, datetime.datetime):
-        path_to_snapshot_folder = '{}/{}/{}/'.format(infra.snapshots_path, idmd5, cr_date.strftime(infra.DATETIME_FORMAT_STR))
+        path_to_snapshot_folder = '{}/{}/{}/'.format(infra.snapshots_path, idmd5,
+                                                     cr_date.strftime(infra.DATETIME_FORMAT_STR))
     if isinstance(cr_date, str):
         path_to_snapshot_folder = '{}/{}/{}/'.format(infra.snapshots_path, idmd5,
-                                                     cr_date.replace(':', '-')[:-7]) # dirty hack
+                                                     cr_date.replace(':', '-')[:-7])  # dirty hack
     else:
         print("Couldn't recognize cr_date from database, exiting...")
         exit(-1)
@@ -121,14 +122,31 @@ if __name__ == '__main__':
     else:
         save_viz(path_to_save_viz, dataset_klass, dataset_root, transform, model, opt.cuda)
 
-
     global_psnrs = []
     global_ssims = []
+    transform = transforms.Compose([ToYCbCr(),
+                                    MyResize(factor=1 / opt.upSampling),
+                                    MyToTensor()])
+    dataloader = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
+                            batch_size=1, num_workers=1)
+    if opt.nEpochs:
+        save_viz(path_to_save_viz, dataset_klass, dataset_root, transform, model, opt.cuda, opt.nEpochs, prefix='global_')
+    else:
+        save_viz(path_to_save_viz, dataset_klass, dataset_root, transform, model, opt.cuda, prefix='global_')
+
+    global_mean_psnr, global_mean_ssim = count_metrics(dataset_klass, dataset_root, transform, model, opt.cuda)
+
+    with open(os.path.join(path_to_save_viz, 'metrics.txt'), 'w') as f:
+        f.write("Mean psnr on small random samples using {} passes: {}\n".format(opt.nEpochs, mean_psnr))
+        f.write("Mean ssim on small random samples using {} passes: {}\n".format(opt.nEpochs, mean_ssim))
+        f.write("Mean psnr on big pictures: {}\n".format(global_mean_psnr))
+        f.write("Mean ssim on big pictures: {}\n".format(global_mean_ssim))
+
+"""
     transform = transforms.Compose([ToYCbCr(),
                                     MyToTensor()])
     dataloader = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
                             batch_size=1, num_workers=1)
-
     for i, data in enumerate(dataloader):
         lr, hr = data
         topil = transforms.ToPILImage(mode='YCbCr')
@@ -190,3 +208,4 @@ if __name__ == '__main__':
         f.write("Mean ssim on small random samples using {} passes: {}\n".format(opt.nEpochs, mean_ssim))
         f.write("Mean psnr on big pictures, restored using small pieces: {}\n".format(np.array(global_psnrs).mean()))
         f.write("Mean ssim on big pictures, restored using small pieces: {}\n".format(np.array(global_ssims).mean()))
+"""
