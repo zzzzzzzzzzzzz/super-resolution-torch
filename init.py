@@ -5,6 +5,8 @@ import hashlib
 import sqlite3
 import subprocess
 import datetime
+# TODO: возможно, стоит сделать статус завершился эксперимент или нет
+# TODO: добавить предложение о продолжении обучения, если такой эксперимент уже был
 
 
 class Infrastructure(object):
@@ -109,6 +111,7 @@ class Infrastructure(object):
                           dataset_id INTEGER,
                           train_params TEXT, 
                           description TEXT,
+                          ended INTEGER DEFAULT 0,
                           dt DATETIME,
                           FOREIGN KEY (model_id) REFERENCES models(id),
                           FOREIGN KEY (dataset_id) REFERENCES datasets(id))
@@ -177,18 +180,19 @@ class Infrastructure(object):
         c = self.conn.cursor()
         c.execute('''
                      SELECT 
-                            *
+                            id, idmd5, model_id, dataset_id, train_params, description, ended, dt
                      FROM
                           experiments
                      WHERE
                           idmd5 = ?
                   ''', (experiment_id,))
 
+        # TODO: продумать как сделать возобновление эксперимента с последнего снэпшота в случае, когда моделей используется две
         if c.fetchone():
             text = ''
             while (text != 'y') and (text != 'n'):
                 text = str(
-                    input("It seems like you've already launched such experiment: {}. Do you want to continue?[y/n]:".format(experiment_id))).lower()
+                    input("It seems like you launched such experiment: {}. Do you want to continue?[y/n]:".format(experiment_id))).lower()
             if text == 'y':
                 print("Ok will start this experiment...")
             else:

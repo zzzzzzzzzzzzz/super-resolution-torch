@@ -64,6 +64,8 @@ def ssim(image_original: np.ndarray, image_restored: np.ndarray, dynamic_range=2
            (image_original.shape[2] == image_restored.shape[2]), "Original and restored images shapes are not equal"
 
     ssims = []
+    image_original = np.int32(np.uint8(image_original * 255))
+    image_restored = np.int32(np.uint8(image_restored * 255))
     ssim_lambda = lambda mux, muy, variancex, variancey, covxy, c1, c2: ((2 * mux * muy + c1) * (2 * covxy + c2)) / ((mux ** 2 + muy ** 2 + c1) * (variancex + variancey + c2))
     for j in range(10000):
         a, b = rand_square_crop_ndarray(image_original, image_restored)

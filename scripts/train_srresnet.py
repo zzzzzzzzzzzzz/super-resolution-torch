@@ -7,6 +7,7 @@ import sys
 import time
 
 from models.srresnet import SrResNet
+from utils.misc import finish_experiment
 
 sys.path.append('.')
 import torch
@@ -141,6 +142,11 @@ if __name__ == '__main__':
     end = time.time()
 
     write_metrics(infra, model, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date, opt.cuda)
+
+    if finish_experiment(infra, experiment_id):
+        print("Set ended to 1 in db")
+    else:
+        print("Didn't manage to set ended to 1 in db. It's better to check what's wrong and maybe set this value manually")
 
     # Avoid closing
     text = ''

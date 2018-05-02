@@ -1,10 +1,13 @@
 # coding: utf-8
-
+# TODO: голосование нескольких дискриминаторов
+# TODO: было бы круто, если бы спрашивала что я хочу использовать в качестве дискриминатора и генератора, и с какими параметрами
 import argparse
 import os
 import sqlite3
 import sys
 import time
+
+from utils.misc import finish_experiment
 
 sys.path.append('.')
 import torch
@@ -17,7 +20,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from init import Infrastructure
-from models.srgan import Generator, Discriminator, FeatureExtractor
+from models.srgan import Generator, Discriminator, FeatureExtractor, VotingDiscriminator
 from transforms.myrandomsample import MyRandomSample
 from transforms.myresize import MyResize
 from transforms.totensor import MyToTensor
@@ -55,6 +58,8 @@ if __name__ == '__main__':
     parser.add_argument('--generatorAdversarialLossWeight', type=float, default=1e-3,
                         help='The weight of adversarial loss (when fake data is input for discriminator with labels saying that the data is real')
     parser.add_argument('--description', type=str, help="The description of experiment. It's purpose")
+    parser.add_argument('--discriminatorDropWeightsEpoch', default=0, type=int, help="The number of the epoch when generator's weights will be freezed and discriminator's weights will be reinitialized")
+    parser.add_argument('--generatorWeightsFree', default=0, type=int, help="The number of the epoch when generator's weights will be freed from freezing after dropping the discriminator's weights")
 
     opt = parser.parse_args()
     print(opt)
@@ -100,7 +105,8 @@ if __name__ == '__main__':
         generator.load_state_dict(torch.load(opt.generatorWeights))
     print(generator)
 
-    discriminator = Discriminator()
+    discriminator_klass = VotingDiscriminator
+    discriminator = discriminator_klass()
     if opt.discriminatorWeights != '':
         discriminator.load_state_dict(torch.load(opt.discriminatorWeights))
     print(discriminator)
@@ -162,7 +168,7 @@ if __name__ == '__main__':
                 mean_generator_content_loss / len(dataloader)))
             log_value('generator_mse_loss', mean_generator_content_loss / len(dataloader), epoch)
     else:
-        sys.stdout.write("Skipping generator pretrain phase")
+        sys.stdout.write("Skipping generator pretrain phase\n")
 
     # Do checkpointing
     torch.save(generator.state_dict(), '{}/{}/{}/generator_pretrain.pth'.format(infra.snapshots_path, experiment_id,
@@ -175,11 +181,16 @@ if __name__ == '__main__':
 
     print('SRGAN training')
     try:
+        freeze_generator = False
+        last_mgtl = 0.0
+        last_mgal = 0.0
+        last_mgcl = 0.0
         for epoch in range(opt.nEpochs):
             mean_generator_content_loss = 0.0
             mean_generator_adversarial_loss = 0.0
             mean_generator_total_loss = 0.0
             mean_discriminator_loss = 0.0
+            mean_discriminator_accuracy = 0.0
 
             for i, data in enumerate(dataloader):
 
@@ -206,29 +217,46 @@ if __name__ == '__main__':
                 discriminator.zero_grad()
 
                 discriminator_loss = adversarial_criterion(discriminator(high_res_real), target_real)
-                discriminator_loss += adversarial_criterion(discriminator(Variable(high_res_fake.data)), target_fake)
+                discr_fake_results = discriminator(Variable(high_res_fake.data))
+                discriminator_loss += adversarial_criterion(discr_fake_results, target_fake)
+                mean_discriminator_accuracy += ((discr_fake_results < 0.5).sum()).data[0]/hr_len
                 mean_discriminator_loss += discriminator_loss.data[0]
 
                 discriminator_loss.backward()
                 optim_discriminator.step()
 
+                if epoch+1 == opt.discriminatorDropWeightsEpoch:
+                    discriminator = discriminator_klass()
+                    if opt.cuda:
+                        discriminator.cuda()
+                    # maybe it makes sense to change lr here
+                    optim_discriminator = optim.Adam(discriminator.parameters(), lr=opt.discriminatorLR)
+                    freeze_generator = True
+
                 ######### Train generator #########
-                generator.zero_grad()
+                if not freeze_generator:
+                    generator.zero_grad()
 
-                real_features = Variable(feature_extractor(high_res_real).data) # we don't compute gradients for real_features, thus, zero grad by creating new Variable
-                fake_features = feature_extractor(high_res_fake)
+                    real_features = Variable(feature_extractor(high_res_real).data) # we don't compute gradients for real_features, thus, zero grad by creating new Variable
+                    fake_features = feature_extractor(high_res_fake)
 
-                generator_content_loss = content_criterion(high_res_fake,
-                                                           high_res_real) + opt.generatorLatentLossWeight * content_criterion(fake_features, real_features)
-                mean_generator_content_loss += generator_content_loss.data[0]
-                generator_adversarial_loss = adversarial_criterion(discriminator(Variable(high_res_fake.data)), target_real)
-                mean_generator_adversarial_loss += generator_adversarial_loss.data[0]
+                    generator_content_loss = content_criterion(high_res_fake,
+                                                               high_res_real) + opt.generatorLatentLossWeight * content_criterion(fake_features, real_features)
+                    mean_generator_content_loss += generator_content_loss.data[0]
+                    generator_adversarial_loss = adversarial_criterion(discriminator(Variable(high_res_fake.data)), target_real)
+                    mean_generator_adversarial_loss += generator_adversarial_loss.data[0]
 
-                generator_total_loss = generator_content_loss + opt.generatorAdversarialLossWeight * generator_adversarial_loss
-                mean_generator_total_loss += generator_total_loss.data[0]
+                    generator_total_loss = generator_content_loss + opt.generatorAdversarialLossWeight * generator_adversarial_loss
+                    mean_generator_total_loss += generator_total_loss.data[0]
 
-                generator_total_loss.backward()
-                optim_generator.step()
+                    generator_total_loss.backward()
+                    optim_generator.step()
+
+                if epoch+1 == opt.generatorWeightsFree:
+                    freeze_generator = False
+                    last_mgcl = mean_generator_content_loss
+                    last_mgal = mean_generator_adversarial_loss
+                    last_mgtl = mean_generator_total_loss
 
                 ######### Status and display #########
                 sys.stdout.write(
@@ -244,10 +272,17 @@ if __name__ == '__main__':
                     mean_discriminator_loss / len(dataloader), mean_generator_content_loss / len(dataloader),
                     mean_generator_adversarial_loss / len(dataloader), mean_generator_total_loss / len(dataloader)))
 
-            log_value('generator_content_loss', mean_generator_content_loss / len(dataloader), epoch)
-            log_value('generator_adversarial_loss', mean_generator_adversarial_loss / len(dataloader), epoch)
-            log_value('generator_total_loss', mean_generator_total_loss / len(dataloader), epoch)
-            log_value('discriminator_loss', mean_discriminator_loss / len(dataloader), epoch)
+            dlen = len(dataloader)
+            if not freeze_generator:
+                log_value('generator_content_loss', mean_generator_content_loss / dlen, epoch)
+                log_value('generator_adversarial_loss', mean_generator_adversarial_loss / dlen, epoch)
+                log_value('generator_total_loss', mean_generator_total_loss / dlen, epoch)
+            else:
+                log_value('generator_content_loss', last_mgcl / dlen, epoch)
+                log_value('generator_adversarial_loss', last_mgal / dlen, epoch)
+                log_value('generator_total_loss', last_mgtl / dlen, epoch)
+            log_value('discriminator_loss', mean_discriminator_loss / dlen, epoch)
+            log_value('discriminator_accuracy', mean_discriminator_accuracy / dlen, epoch)
 
             # Do checkpointing
             torch.save(generator.state_dict(),
@@ -266,6 +301,11 @@ if __name__ == '__main__':
     end = time.time()
 
     write_metrics(infra, generator, dataset_klass, dataset_root, transform, time.time() - start, experiment_id, cr_date, opt.cuda)
+
+    if finish_experiment(infra, experiment_id):
+        print("Set ended to 1 in db")
+    else:
+        print("Didn't manage to set ended to 1 in db. It's better to check what's wrong and maybe set this value manually")
 
     # Avoid closing
     text = ''

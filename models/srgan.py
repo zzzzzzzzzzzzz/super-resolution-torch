@@ -1,8 +1,9 @@
+from functools import reduce
+
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.autograd import Variable
 
 
 def swish(x):  # another activation function
@@ -119,3 +120,29 @@ class Discriminator(nn.Module):
 
         x = self.conv9(x)
         return F.sigmoid(F.avg_pool2d(x, x.size()[2:])).view(x.size()[0], -1)
+
+
+class VotingDiscriminator(nn.Module):
+    def __init__(self):
+        super(VotingDiscriminator, self).__init__()
+        self.voters = [Discriminator(), Discriminator(), Discriminator()]
+
+    def modules(self):
+        for voter in self.voters:
+            for name, module in voter.named_modules():
+                yield module
+
+    def parameters(self):
+        for voter in self.voters:
+            for name, param in voter.named_parameters():
+                yield param
+
+    def forward(self, x):
+        res = self.voters[0].forward(x).clone()
+        l = len(self.voters)
+        for idx in range(1,l):
+            res.add_(self.voters[idx].forward(x))
+        return res / l
+        # return reduce(lambda a,b: a.forward(x) + b.forward(x), self.voters) / len(self.voters)
+
+
