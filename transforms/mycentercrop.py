@@ -17,8 +17,8 @@ class MyCenterCrop(object):
         if not self.size:
             lrsh = min(lr.size) # basically it's expected to be the same
             hrsh = min(hr.size)
-            lrsh = lrsh // self.upSampling
-            hrsh = hrsh // self.upSampling
+            lrsh = (lrsh // self.upSampling) * self.upSampling
+            hrsh = (hrsh // self.upSampling) * self.upSampling
             assert lrsh == hrsh, "It's expected that these to images must be the same size. Lr just become low res " \
                                  "pic and hr will remain the same "
             return {
