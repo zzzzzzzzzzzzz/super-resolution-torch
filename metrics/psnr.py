@@ -20,8 +20,8 @@ def psnr(image_original: np.ndarray, image_restored: np.ndarray):
            (image_original.shape[1] == image_restored.shape[1]) and \
            (image_original.shape[2] == image_restored.shape[2]), "Original and restored images shapes are not equal"
 
-    image_original = np.int32(np.uint8(image_original * 255))
-    image_restored = np.int32(np.uint8(image_restored * 255))
+    image_original = np.int64(np.uint8(image_original * 255))
+    image_restored = np.int64(np.uint8(image_restored * 255))
     denominator = 0.0
     for i in range(image_original.shape[0]):
         denominator += np.sum(np.power(image_original[i] - image_restored[i], 2))
