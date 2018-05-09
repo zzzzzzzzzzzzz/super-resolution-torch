@@ -190,7 +190,8 @@ if __name__ == '__main__':
             mean_generator_adversarial_loss = 0.0
             mean_generator_total_loss = 0.0
             mean_discriminator_loss = 0.0
-            mean_discriminator_accuracy = 0.0
+            mean_discriminator_accuracy_fake = 0.0
+            mean_discriminator_accuracy_real = 0.0
 
             for i, data in enumerate(dataloader):
 
@@ -216,10 +217,12 @@ if __name__ == '__main__':
                 ######### Train discriminator #########
                 discriminator.zero_grad()
 
-                discriminator_loss = adversarial_criterion(discriminator(high_res_real), target_real)
+                discr_real_results = discriminator(high_res_real)
+                discriminator_loss = adversarial_criterion(discr_real_results, target_real)
                 discr_fake_results = discriminator(Variable(high_res_fake.data))
                 discriminator_loss += adversarial_criterion(discr_fake_results, target_fake)
-                mean_discriminator_accuracy += ((discr_fake_results < 0.5).sum()).data[0]/hr_len
+                mean_discriminator_accuracy_fake += ((discr_fake_results < 0.5).sum()).data[0]/hr_len
+                mean_discriminator_accuracy_real += ((discr_real_results >= 0.5).sum()).data[0] / hr_len
                 mean_discriminator_loss += discriminator_loss.data[0]
 
                 discriminator_loss.backward()
@@ -282,7 +285,8 @@ if __name__ == '__main__':
                 log_value('generator_adversarial_loss', last_mgal / dlen, epoch)
                 log_value('generator_total_loss', last_mgtl / dlen, epoch)
             log_value('discriminator_loss', mean_discriminator_loss / dlen, epoch)
-            log_value('discriminator_accuracy', mean_discriminator_accuracy / dlen, epoch)
+            log_value('discriminator_accuracy_fake', mean_discriminator_accuracy_fake / dlen, epoch)
+            log_value('discriminator_accuracy_real', mean_discriminator_accuracy_real / dlen, epoch)
 
             # Do checkpointing
             torch.save(generator.state_dict(),

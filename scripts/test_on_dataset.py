@@ -119,7 +119,7 @@ if __name__ == '__main__':
     global_psnrs = []
     global_ssims = []
     transform = transforms.Compose([ToYCbCr(),
-                                    MyCenterCrop(size=0),
+                                    MyCenterCrop(size=0, upSampling=opt.upSampling),
                                     MyResize(factor=1 / opt.upSampling),
                                     MyToTensor()])
     dataloader = DataLoader(dataset_klass(root_dir=dataset_root, transform=transform, train=False),
